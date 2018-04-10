@@ -1,7 +1,7 @@
+
 ###################################################################
-# 2018 ST540 Take Home Exam Code
-# Author: James Lee
-# ID: 200203022
+# NDVI Project
+# Author: James Lee (jlee73@ncsu.edu
 # Abstract: The goal of this question is to estimate the NDVI
 # in 6 pixels over the course of 365 days.
 # Three datasets from different satellites is given (Y1.Y2.Y3)
@@ -47,105 +47,60 @@ Y_proc[,6]<-rowMeans(cbind(Y1[,6],Y3_revise),na.rm=TRUE)
 #fill in grand mean to the rest of the NaNs
 Y_proc[is.nan(Y_proc)]<-mean(Y_proc,na.rm = TRUE)
 
-#store grand mean for further usage
+#store grand mean.col.row for further usage
 Y_bar=mean(Y_proc,na.rm = TRUE)
+ns<-nrow(Y_proc)
+nt<-ncol(Y_proc)
 
-#store W(sigma prior) for further usage
-W<-0.01*diag(6)
-
-###Bayesian modeling- 
-
-##process layer
-#theta(1,j) ~ Normal(mu1,sigma1)
-#theta(t,j)|theta(t-1,j) ~ Normal(mu2+rho*theta(t-1),sigma2)
-
-##prior layer
-#mu1 ~ Normal(0,100)
-#mu2 ~ Normal(0,100)
-#sigma1 ~ InvWishart
-#sigma2 ~ InvWishart
-#rho ~ uniform(0,1)
-
+###Bayesian modeling- 2 way random effects model
+##Yij~Normal(mu+alphai+gammaj,taue^2) 
 
 #JAGs code
 NDVI_model <- "model{
 
-# Likelihood
-for(j in 1:6){
-Y[1,6]    ~ dmnorm(mu1[1:6],sigma1[1:6,1:6])
-}
-for(i in 2:365){for(j in 1:6){
-Y[i,j]    ~ dmnorm(mu2[1:6]+rho[1:6]*Y[i-1,j],sigma2[1:6,1:6])
-}}
+   # Likelihood
+   for(i in 1:ns){for(j in 1:nt){
+      Y[i,j]    ~ dnorm(mean[i,j],taue)
+      mean[i,j] <- mu + alpha[i] + gamma[j]
+   }}
 
-# Priors
-mu1[1] ~ dnorm(0,0.01)
-mu1[2] ~ dnorm(0,0.01)
-mu1[3] ~ dnorm(0,0.01)
-mu1[4] ~ dnorm(0,0.01)
-mu1[5] ~ dnorm(0,0.01)
-mu1[6] ~ dnorm(0,0.01)
-mu2[1] ~ dnorm(0,0.01)
-mu2[2] ~ dnorm(0,0.01)
-mu2[3] ~ dnorm(0,0.01)
-mu2[4] ~ dnorm(0,0.01)
-mu2[5] ~ dnorm(0,0.01)
-mu2[6] ~ dnorm(0,0.01)
-for(k in 1:6){
-rho[k] ~ dunif(0,1)
-}
-sigma1[1:6,1:6] ~ dwish(R[,],100)
-sigma2[1:6,1:6] ~ dwish(R[,],100)
-R[1,1]<-0.01
-R[1,2]<-0
-R[1,3]<-0
-R[1,4]<-0
-R[1,5]<-0
-R[1,6]<-0
-R[2,1]<-0
-R[2,2]<-0.01
-R[2,3]<-0
-R[2,4]<-0
-R[2,5]<-0
-R[2,6]<-0
-R[3,1]<-0
-R[3,2]<-0
-R[3,3]<-0.01
-R[3,4]<-0
-R[3,5]<-0
-R[3,6]<-0
-R[4,1]<-0
-R[4,2]<-0
-R[4,3]<-0
-R[4,4]<-0.01
-R[4,5]<-0
-R[4,6]<-0
-R[5,1]<-0
-R[5,2]<-0
-R[5,3]<-0
-R[5,4]<-0
-R[5,5]<-0.01
-R[5,6]<-0
-R[6,1]<-0
-R[6,2]<-0
-R[6,3]<-0
-R[6,4]<-0
-R[6,5]<-0
-R[6,6]<-0.01
+   # Random effects
+   for(i in 1:ns){
+    alpha[i] ~ dnorm(0,taus)
+   }
+   for(j in 1:nt){
+    gamma[j] ~ dnorm(0,taut)
+   }
 
-# Output the parameters of interest
+   # Priors
+   mu   ~ dnorm(0,0.01)
+   taue ~ dgamma(0.1,0.1)
+   taus ~ dgamma(0.1,0.1)
+   taut ~ dgamma(0.1,0.1)
 
-}"
+   # Output the parameters of interest
+   sigma2[1] <- 1/taue
+   sigma2[2] <- 1/taus
+   sigma2[3] <- 1/taut
+   sigma[1]  <- 1/sqrt(taue)
+   sigma[2]  <- 1/sqrt(taus)
+   sigma[3]  <- 1/sqrt(taut)
+   pct[1]    <- sigma2[1]/sum(sigma2[])   
+   pct[2]    <- sigma2[2]/sum(sigma2[])   
+   pct[3]    <- sigma2[3]/sum(sigma2[])   
 
-#run rjags package
+  }"
+###run rjags package & convergence diagnostics
 library(rjags)
-dat    <- list(Y=Y_proc,pix=6,N=365)
-init   <- list(mu1=Y_bar)
-model1 <- jags.model(textConnection(NDVI_model),inits=init,data = dat, n.chains=1)
+   dat    <- list(Y=Y_proc,ns=ns,nt=nt)
+   init   <- list(mu=Y_bar)
+   model1 <- jags.model(textConnection(NDVI_model),inits=init,data = dat, n.chains=1)
+   update(model1, 10000, progress.bar="none")
 
-###convergence diagnostics
+   samp   <- coda.samples(model1, 
+             variable.names=c("sigma","pct","gamma"), 
+             n.iter=20000, progress.bar="none")
 
+   plot(samp)
 
-
-###final result
 
