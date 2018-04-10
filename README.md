@@ -1,4 +1,4 @@
-NDVI Prediction
+# NDVI Prediction
 The data for this analysis are simulated to represent satellite measurements of Normalized Difference
 Vegetation Index (NDVI), which is a common measure of greenness used in many fields ranging
 from ecology to agriculture. The goal of this project is to predict the value of NDVI was simulated for 6 pixels 
